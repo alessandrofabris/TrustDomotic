@@ -75,13 +75,15 @@ INTEnableSystemMultiVectoredInt();
                 button = 1;
             }
         }               
+        
        else if ( (!(PORTGbits.RG6 & 1)) && button == 1 ){
-            delay(1);
+            delay(10);
             if (!(PORTGbits.RG6 & 1)){
                 button = 0;
             }
-        } 
-   
+        }
+         
+        
         if (button == 1){
             LATDbits.LATD5 =1;
             putcUART1('a');
