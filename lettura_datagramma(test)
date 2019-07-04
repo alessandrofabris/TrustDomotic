@@ -1,0 +1,32 @@
+const readline = require('readline');
+var serialport = require('serialport');
+
+const rl =  readline.createInterface({
+input: process.stdin,
+output: process.stdout,
+prompt: ": "
+});
+
+rl.prompt();
+
+//rl.on('datagram', (datagram) => {
+//	console.log('Received: ${line}');});
+
+var portName = "/dev/ttyUSB0";
+
+var myPort = new serialport(portName, 9600);
+
+myPort.on('datagram',function(datagram){
+console.log(datagram.toString());
+var idrx_datagram = datagram.substring(0, 1); //indirizzo del device in Ricezione
+var idtx_datagram = datagram.substring(1, 2); //indirizzo del device in Trasmissione
+var command_datagram = datagram.substring(2,3); //comando che si trasmette
+var payload_datagram = datagram.substring(3,4); // payload(dati che invio)
+
+	if(idrx_datagram == 'M'){		//se sono io :
+		myPort.write('TRUSTBERRY in attesa di imparare gli altri comandi :>');
+}
+else myPort.write('non sono stato chiamato io');
+//myPort.write('a');
+
+});
