@@ -62,18 +62,20 @@ void main(void) {
     TRISDbits.TRISD5 = 0;
     LATDbits.LATD5 = 0;
     
+    
+    //D12 -> G7
     // Optimize PIC32 performance and return peripheral bus frequency
- unsigned int pbClk=SYSTEMConfig( SYSCLK, SYS_CFG_WAIT_STATES | SYS_CFG_PCACHE);
+ unsigned long int pbClk=SYSTEMConfig( SYSCLK, SYS_CFG_WAIT_STATES | SYS_CFG_PCACHE);
  // Abilita UART1 and set baud rate to DESIRED_BAUDRATE=9600
  OpenUART1( UART_EN, UART_RX_ENABLE | UART_TX_ENABLE, pbClk/16/DESIRED_BAUDRATE-1);
- ConfigIntUART1(UART_INT_PR2 | UART_RX_INT_EN | UART_TX_INT_EN);
+ ConfigIntUART1(UART_INT_PR2 | UART_RX_INT_EN | UART_TX_INT_EN);  //| UART_TX_INT_EN
 
 // Must enable glocal interrupts - in this case, we are using multi-vector mode
 INTEnableSystemMultiVectoredInt(); 
-while( BusyUART1()); // Attendo che il modulo UART sia libero
-        
+
+
  while (1)
- {
+ {   
      if (receiver_rx == INDIRIZZO )
      {
          switch (command)
@@ -108,11 +110,11 @@ void __ISR(_UART1_VECTOR, ipl2) IntUart1Handler(void)
         char rxData = (char)ReadUART1();
         switch (i) {
             case 0:
-                sender_rx = rxData;
+                receiver_rx = rxData;
                 i++;
                 break;
             case 1:
-                receiver_rx = rxData;
+                sender_rx = rxData;
                 i++;
                 break;
             case 2:
@@ -121,7 +123,7 @@ void __ISR(_UART1_VECTOR, ipl2) IntUart1Handler(void)
                 break;
             case 3:
                 payload = rxData;
-                i++;
+                i = 0;
                 break;              
             
         }
@@ -133,4 +135,10 @@ void __ISR(_UART1_VECTOR, ipl2) IntUart1Handler(void)
 // Echo what we just received.
  //       putcUART1(ReadUART1());
     }
+    
+    if(mU1TXGetIntFlag())
+    { 
+        mU1TXClearIntFlag();
+    }
+    return;
 }
