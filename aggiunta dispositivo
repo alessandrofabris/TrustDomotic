@@ -1,0 +1,254 @@
+/*
+ * File:   main.c
+ * Author: Utente
+ *
+ * Created on 3 luglio 2019, 10.25
+ */
+
+#pragma config FPLLIDIV = DIV_2 // PLL Input Divider (1x Divider)
+#pragma config FPLLMUL = MUL_20 // PLL Multiplier (24x Multiplier)
+#pragma config UPLLIDIV = DIV_2 // USB PLL Input Divider (12x Divider)
+#pragma config UPLLEN = OFF // USB PLL Enable (Disabled and Bypassed)
+#pragma config FPLLODIV = DIV_1 // System PLL Output Clock Divider (PLL Divide by 256)
+// DEVCFG1
+#pragma config FNOSC = PRIPLL // Oscillator Selection Bits (Primary Osc w/PLL (XT+,HS+,EC+PLL))
+#pragma config FSOSCEN = ON // Secondary Oscillator Enable (Enabled)
+#pragma config IESO = ON // Internal/External Switch Over (Enabled)
+#pragma config POSCMOD = HS // Primary Oscillator Configuration (HS osc mode)
+#pragma config OSCIOFNC = ON // CLKO Output Signal Active on the OSCO Pin (Enabled)
+#pragma config FPBDIV = DIV_8 // Peripheral Clock Divisor (Pb_Clk is Sys_Clk/8)
+#pragma config FCKSM = CSDCMD // Clock Switching and Monitor Selection (Clock Switch Disable, FSCM Disabled)
+#pragma config WDTPS = PS1048576 // Watchdog Timer Postscaler (1:1048576)
+#pragma config FWDTEN = OFF // Watchdog Timer Enable (WDT Disabled (SWDTEN Bit Controls))
+// DEVCFG0
+#pragma config DEBUG = OFF // Background Debugger Enable (Debugger is disabled)
+#pragma config ICESEL = ICS_PGx2 // ICE/ICD Comm Channel Select (ICE EMUC2/EMUD2 pins shared with PGC2/PGD2)
+#pragma config PWP = OFF // Program Flash Write Protect (Disable)
+#pragma config BWP = OFF // Boot Flash Write Protect bit (Protection Disabled)
+#pragma config CP = OFF
+
+#include <xc.h>
+#include <p32xxxx.h>
+#include <plib.h>
+
+#define SYSCLK 80000000
+#define DESIRED_BAUDRATE 9600
+#define INDIRIZZO '2' //inserisci qui l'indirizzo del dispositivo che vuoi aggiungere
+
+//void initializeUART(){
+// Optimize PIC32 performance and return peripheral bus frequency
+//double pbClk=SYSTEMConfig( SYSCLK, SYS_CFG_WAIT_STATES | SYS_CFG_PCACHE);
+// Abilita UART1 and set baud rate to DESIRED_BAUDRATE=9600
+//OpenUART1( UART_EN, UART_RX_ENABLE | UART_TX_ENABLE, pbClk/16/BAUD_VALUE-1);
+//while( BusyUART1()); // Attendo che il modulo UART sia libero
+//}
+#define CONFIG1 (ADC_MODULE_ON | ADC_FORMAT_INTG32 | ADC_CLK_AUTO | ADC_AUTO_SAMPLING_ON)
+#define CONFIG2 (ADC_VREF_AVDD_AVSS | ADC_OFFSET_CAL_DISABLE | ADC_SCAN_ON | ADC_SAMPLES_PER_INT_1 | ADC_ALT_BUF_OFF | ADC_ALT_INPUT_OFF)
+#define CONFIG3 (ADC_CONV_CLK_INTERNAL_RC | ADC_SAMPLE_TIME_15)
+#define CONFIGPORT (ENABLE_AN2_ANA)
+#define CONFIGSCAN (SKIP_SCAN_AN0 | SKIP_SCAN_AN1 | SKIP_SCAN_AN3 | SKIP_SCAN_AN4 | SKIP_SCAN_AN5 | SKIP_SCAN_AN6 | SKIP_SCAN_AN7 | SKIP_SCAN_AN8 | SKIP_SCAN_AN9 | SKIP_SCAN_AN10 | SKIP_SCAN_AN11 | SKIP_SCAN_AN12 | SKIP_SCAN_AN13 | SKIP_SCAN_AN14 | SKIP_SCAN_AN15)
+
+int count = 0;
+int i = 0;
+int j = 0;
+int mess_ricevuto = 0;
+char sender_rx = '0';
+char receiver_rx = '0';
+char command = '0';
+char payload = '0';
+int controllo = 0;
+int ack = 0;
+int read = 0;
+int flag = 0;
+
+void displayLed(char h){
+    LATBbits.LATB13 = (h >> 0) & 0x01;  //d8?    rb13
+    LATBbits.LATB14 = (h >> 1) & 0x01;  //d9     rb14
+    LATGbits.LATG9 = (h >> 2) & 0x01;  //d10    rg9
+    LATGbits.LATG8 = (h >> 3) & 0x01;  //d11    rg8
+    LATGbits.LATG7 = (h >> 4) & 0x01;  //d12    rg7
+    LATGbits.LATG6 = (h >> 5) & 0x01;  //d13    rg6
+    
+    read = 0;
+}
+
+void delay(int t){
+    int n = t*1900;
+    while (n > 0) {n--;}
+}
+void initializeADC(){
+ CloseADC10(); // Generally, you should disable the ADC before setup.
+ // Use ground as negative reference for channel A instead of pin AN1 (RB1)
+ //SetChanADC10( ADC_CH0_NEG_SAMPLEA_NVREF);
+ OpenADC10( CONFIG1, CONFIG2, CONFIG3, CONFIGPORT, CONFIGSCAN);
+ // Setup for the ADC10.
+ EnableADC10(); // Enables the ADC10.
+}
+void main(void) {
+    //TRISD = 0x0000; //Abbiamo definito le due porte fisse per l'output
+    TRISG = 0x0000;
+    TRISDbits.TRISD7 = 0;
+    TRISDbits.TRISD6 = 0;
+    TRISDbits.TRISD5 = 0;
+    TRISGbits.TRISG8 = 0;
+    TRISGbits.TRISG7 = 0;
+    TRISGbits.TRISG6 = 0;
+    //TRISBbits.TRISB13 = 0;
+    //TRISBbits.TRISB14 = 0;
+    
+    LATDbits.LATD5 = 0;
+     
+    LATDbits.LATD6 = 0;
+    LATDbits.LATD7 = 0;
+    //LATGbits.LATG7 = 0;
+    
+    
+    
+    
+    //D12 -> G7
+    //D3 -> D5
+    // Optimize PIC32 performance and return peripheral bus frequency
+ unsigned long int pbClk=SYSTEMConfig( SYSCLK, SYS_CFG_WAIT_STATES | SYS_CFG_PCACHE);
+ // Abilita UART1 and set baud rate to DESIRED_BAUDRATE=9600
+ OpenUART1( UART_EN, UART_RX_ENABLE | UART_TX_ENABLE, pbClk/16/DESIRED_BAUDRATE-1);
+ ConfigIntUART1(UART_INT_PR2 | UART_RX_INT_EN | UART_TX_INT_EN);  //| UART_TX_INT_EN
+ 
+ //OpenTimer2( T2_ON | T2_SOURCE_INT | T2_PS_1_64, 0x2FFF);
+   // ConfigIntTimer2( T2_INT_ON | T2_INT_PRIOR_3);
+
+
+// Must enable glocal interrupts - in this case, we are using multi-vector mode
+INTEnableSystemMultiVectoredInt(); 
+char led[6] = {0x01,0x03,0x07,0x0F,0x1F,0x3F};
+
+    initializeADC();
+while (1)
+{   
+    //char led[6] = {0x01,0x03,0x07,0x0F,0x1F,0x3F};
+    //int read = ReadADC10(0) /171;
+    //read = ReadADC10(0)/70;
+    /*
+    if (flag)
+    {
+        read = ReadADC10(0);
+        displayLed(led[read]);
+        flag = 0;
+    }
+     * */
+    
+    
+       if (receiver_rx == INDIRIZZO && i == 0 )
+        {
+         
+            switch (command)
+            {
+                case 'A':
+                    LATDbits.LATD6 = ~LATDbits.LATD6;
+                    //LATDbits.LATD6 = 1;
+                    receiver_rx = '0';
+                    break;
+                case 'B':
+                    LATDbits.LATD6 = ~LATDbits.LATD6;
+                    //LATDbits.LATD6 = 0;
+                    receiver_rx = '0';
+                    break;
+                case 'C':
+                {
+                    //LATDbits.LATD7 = 1;
+                    if (LATDbits.LATD6)
+                    {
+                        payload = '1';
+                    }
+                    else 
+                    {
+                        payload = '0';
+                    }
+                    
+                    while(BusyUART1());
+                    LATDbits.LATD5 = 1;
+                    putcUART1(receiver_rx);
+                    putcUART1(sender_rx);
+                    putcUART1(command);
+                    putcUART1(payload);    
+                    putcUART1('\n');
+                    while(BusyUART1());
+                    LATDbits.LATD5 = 0;
+                    receiver_rx = '0';
+                    //payload = '0';
+                    break;
+                }
+                    
+            }   
+            command = 0x00;
+        }      
+ }  
+    return;
+}
+
+// UART 1 interrupt handler
+// it is set at priority level 2
+void __ISR(_UART1_VECTOR, ipl2) IntUart1Handler(void)
+{
+// Is this an RX interrupt?
+    if(mU1RXGetIntFlag())
+    { 
+        
+        char rxData = (char)ReadUART1();
+        switch (i) {
+            case 0:
+                if (rxData != '\n')
+                {
+                   receiver_rx = rxData;
+                   i++;
+                }
+                break;
+            case 1:
+                sender_rx = rxData;
+                i++;
+                break;
+            case 2:
+                command = rxData;
+                i++;
+                break;
+            case 3:
+                payload = rxData;
+                i = 0;
+                //LATGbits.LATG7 = 0;
+                break;              
+            
+        }
+        
+        
+        
+// Clear the RX interrupt Flag
+        mU1RXClearIntFlag();
+// Echo what we just received.
+ //       putcUART1(ReadUART1());
+    }
+    
+    if(mU1TXGetIntFlag())
+    { 
+        //putcUART1(receiver_rx);
+        mU1TXClearIntFlag();
+    }
+    return;
+}
+
+/*
+
+void __ISR(_TIMER_2_VECTOR, ipl2) handlesTimer2Ints(void){
+ // **make sure iplx matches the timer?s interrupt priority level
+  //  read = ReadADC10(0);
+    count++;
+    if (count > 1)
+    {
+        // **make sure iplx matches the timer?s interrupt priority level
+        //LATDbits.LATD6 = ~LATDbits.LATD6;
+        flag = 1;
+        count  = 0;
+    }
+  mT2ClearIntFlag();
+ // Clears the interrupt flag so that the program returns to the main loop
+} // END Timer2 ISR
+ * 
+ * */
